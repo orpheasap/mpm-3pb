@@ -1,6 +1,7 @@
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
+import shutil
 
 from src.material import Material
 from src.mesh2D import Mesh
@@ -9,6 +10,7 @@ from src.lagrange_basis import lagrange_basis_Q4
 from src.quadrature import gauss_2D
 from src.plot_utils import plot_mpm_domain, plot_particles
 from src.solver import run_mpm_solver, NodeState, build_particle_element_map
+from src.vtk_export import write_pvd
 
 
 np.set_printoptions(precision=3, suppress=True)
@@ -27,9 +29,12 @@ def print_subsection(title):
 
 
 #----- Material Properties ------
-E = 110e9  # Young's modulus in Pascals
-nu = 0.34   # Poisson's ratio
-rho = 4430  # Density in kg/m^3
+#E = 110e9  # Young's modulus in Pascals
+#nu = 0.34   # Poisson's ratio
+#rho = 4430  # Density in kg/m^3
+E = 2e5
+nu = 0.3
+rho = 1000
 
 material = Material(E, nu, rho, stressState='PLANE_STRAIN')
 print_section("Material Properties")
@@ -53,7 +58,7 @@ print(f"Total elements: {mesh.elemCount}")
 print(f"Cell size: dx = {mesh.deltax:.4f}, dy = {mesh.deltay:.4f}")
 
 #----- Particle distribution ------
-Lxp = 9
+Lxp = 7
 Lyp = 1
 
 noX = 32
@@ -160,44 +165,41 @@ print(f"Critical time step (CFL condition): {dtcrit:.2e} seconds")
 print(f"Time step: {dtime}")
 print(f"Total time: {time}")
 
-F = 1e9 # magnitude of applied force in Neumann BC region (N)
+F = 1e9 #1e6 # magnitude of applied force in Neumann BC region (N)
 traction = F / (2 * w) # convert force to traction (N/m) assuming uniform distribution over the region of width 2w
+
+shutil.rmtree('vtk_output', ignore_errors=True)
 
 # %%
 solver_results = run_mpm_solver(
     mesh=mesh,
     particles=particles,
+    material=material,
     traction=traction,
-    xp=particles.positions,
-    vp=particles.velocities,
-    Mp=particles.mass,
-    Vp=particles.volume,
-    Fp=particles.deformation_gradient,
-    s=particles.stress,
-    eps=particles.strain,
-    Vp0=particles.initial_volume,
-    rho=material.density,
-    C=material.elasticity_matrix,
-    g=1000,
+    g=9.81,
     dtime=dtime,
     time=time,
     tol=1e-4,
     node_state=node_state,
+    vtk_output_dir='vtk_output',
+    vtk_interval=10,
 )
 
 print("Solver completed")
 print(f"Final number of stored time steps: {len(solver_results['time'])}")
 
+pvd_path = write_pvd('vtk_output', solver_results['vtk_entries'])
+print(f"VTK files written: {len(solver_results['vtk_entries'])} steps → {pvd_path}")
+
 # %%
 #----- Visualization ------
 print_section("Visualization")
-final_xp = solver_results['xp']
 fig, ax = plot_mpm_domain(
     mesh.node,
     mesh.element,
-    final_xp,
+    particles.positions,
     figsize=(12, 8),
-    particle_y_scale=1.0, # magnify y displacements for better visibility
+    particle_y_scale=20.0, # magnify y displacements for better visibility
     particle_y_ref=particles.initial_positions,
 )
 ax.set_title('Final Particle Positions After Solver (Y displacement magnified x50)', fontsize=14, fontweight='bold')

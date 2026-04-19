@@ -1,4 +1,5 @@
 import numpy as np
+from src.vtk_export import write_particles_vtp
 
 
 class NodeState:
@@ -63,143 +64,118 @@ def build_particle_element_map(xp, mesh):
     return pElems, mpoints
 
 
-def run_mpm_solver(mesh, particles, traction, xp, vp, Mp, Vp, Fp, s, eps, Vp0, rho, C,
+def run_mpm_solver(mesh, particles, material, traction,
                    g=9.81, dtime=1e-5, time=1e-2, tol=1e-4,
-                   node_state=None):
+                   node_state=None, vtk_output_dir=None, vtk_interval=10):
     """
     Run a simple MPM solver using Algorithm 1 (PIC/FLIP-style).
 
     Parameters:
-    mesh: Mesh object with node, element, deltax, deltay, numx, numy, elemCount, nodeCount
+    mesh:      Mesh object
     particles: ParticleSet object
-    traction: Applied traction for Neumann BC (N/m)
-    xp: Particle positions (pCount, 2)
-    vp: Particle velocities (pCount, 2)
-    Mp: Particle masses (pCount,)
-    Vp: Particle volumes (pCount,)
-    Fp: Particle deformation gradients (pCount, 4)
-    s: Particle stress vectors (pCount, 3)
-    eps: Particle strains (pCount, 3)
-    Vp0: Initial particle volumes (pCount,)
-    rho: Density
-    C: Elasticity matrix (3x3)
-    g: gravity acceleration magnitude (positive downward)
-    dtime: time step
-    time: final time
-    tol: zero-mass tolerance
-    left_nodes, right_nodes: arrays of node indices for Dirichlet BCs
+    material:  Material object
+    traction:  Applied traction for Neumann BC (N/m)
+    g:         Gravity magnitude (positive downward, m/s^2)
+    dtime:     Time step (s)
+    time:      Total simulation time (s)
+    tol:       Zero-mass tolerance
 
     Returns:
-    result: dict containing histories and final state arrays
+    dict containing energy histories and final state
     """
-    elemCount = mesh.elemCount
-    nodeCount = mesh.nodeCount
-    pCount = len(xp)
-
-    node_state = node_state or NodeState(nodeCount) # create if not provided
-    if node_state.node_count != nodeCount: # sanity check
+    node_state = node_state or NodeState(mesh.nodeCount) 
+    if node_state.node_count != mesh.nodeCount:
         raise ValueError("NodeState size must match mesh.nodeCount")
 
-    pElems, mpoints = build_particle_element_map(xp, mesh) # initial mapping
+    _, mpoints = build_particle_element_map(particles.positions, mesh)
 
-    pos_history = []
-    vel_history = []
     ta = []
     ka = []
     sa = []
+    vtk_entries = []
 
     I = np.eye(2)
     nsteps = int(np.floor(time / dtime))
     t = 0.0
 
-    
-    for istep in range(nsteps): # main time-stepping loop
+    for istep in range(nsteps):
         node_state.reset()
 
-        for e in range(elemCount):
+        for e in range(mesh.elemCount):
             esctr = mesh.element[e]
-            mpts = mpoints[e]
-
-            for pid in mpts: # P2G loop
-                stress = s[pid]
-
-                for idn in esctr: # loop over nodes of this element
-                    x = xp[pid] - mesh.node[idn]
+            for pid in mpoints[e]:  # P2G
+                stress = particles.stress[pid]
+                for idn in esctr:
+                    x = particles.positions[pid] - mesh.node[idn]
                     N, dNdx = get_mpm2d_shape(x, mesh.deltax, mesh.deltay)
 
-                    node_state.mass[idn] += N * Mp[pid] # mass contribution from particle to node
-                    node_state.momentum[idn] += N * Mp[pid] * vp[pid] # momentum contribution from particle to node
+                    node_state.mass[idn]          += N * particles.mass[pid]
+                    node_state.momentum[idn]      += N * particles.mass[pid] * particles.velocities[pid]
+                    node_state.internal_force[idn, 0] -= particles.volume[pid] * (stress[0] * dNdx[0] + stress[2] * dNdx[1])
+                    node_state.internal_force[idn, 1] -= particles.volume[pid] * (stress[2] * dNdx[0] + stress[1] * dNdx[1])
+                    node_state.external_force[idn, 1] -= g * N * particles.mass[pid]
+                    if particles.neumann_particles[pid]:
+                        node_state.external_force[idn, 1] -= traction * N * particles.volume[pid]
 
-                    node_state.internal_force[idn, 0] -= Vp[pid] * (stress[0] * dNdx[0] + stress[2] * dNdx[1]) # internal force contribution in x
-                    node_state.internal_force[idn, 1] -= Vp[pid] * (stress[2] * dNdx[0] + stress[1] * dNdx[1]) # internal force contribution in y
-                    node_state.external_force[idn, 1] -= g * N * Mp[pid] # gravity force contribution in y (newmann BC)
-                    # apply Neumann BC if this node has particles flagged for Neumann BC
-                    if particles.neumann_particles[pid]: # check if this particle is in the Neumann BC region
-                        node_state.external_force[idn, 1] -= traction * N * Vp[pid] # example downward force for Neumann BC
-       
-        node_state.momentum += (node_state.internal_force + node_state.external_force) * dtime # update nodal momentum
+        node_state.momentum += (node_state.internal_force + node_state.external_force) * dtime
 
-        if mesh.lNodes.size > 0: # zero out momentum for left boundary nodes (Dirichlet BC)
+        if mesh.lNodes.size > 0:
             node_state.momentum[mesh.lNodes, :] = 0.0
-        if mesh.rNodes.size > 0: # zero out momentum for right boundary nodes (Dirichlet BC)
+        if mesh.rNodes.size > 0:
             node_state.momentum[mesh.rNodes, :] = 0.0
+        if mesh.bNodes.size > 0:
+            node_state.momentum[mesh.bNodes, :] = 0.0
+        if mesh.tNodes.size > 0:
+            node_state.momentum[mesh.tNodes, :] = 0.0
 
         k = 0.0
         u = 0.0
 
-        for e in range(elemCount): # G2P loop
-            mpts = mpoints[e]
-
-            for pid in mpts:
+        for e in range(mesh.elemCount):  # G2P
+            for pid in mpoints[e]:
                 Lp = np.zeros((2, 2))
-
                 for idn in mesh.element[e]:
-                    x = xp[pid] - mesh.node[idn] # relative position of particle to node
-                    N, dNdx = get_mpm2d_shape(x, mesh.deltax, mesh.deltay) # shape function and gradient for this particle-node pair
+                    x = particles.positions[pid] - mesh.node[idn]
+                    N, dNdx = get_mpm2d_shape(x, mesh.deltax, mesh.deltay)
 
                     vI = np.zeros(2)
-                    if node_state.mass[idn] > tol: # avoid division by zero
-                        vp[pid] += dtime * N * (node_state.internal_force[idn] + node_state.external_force[idn]) / node_state.mass[idn] # update particle velocity from nodal forces
-                        xp[pid] += dtime * N * node_state.momentum[idn] / node_state.mass[idn] # update particle position from nodal momentum
-                        vI = node_state.momentum[idn] / node_state.mass[idn] # nodal velocity for this node
+                    if node_state.mass[idn] > tol:
+                        particles.velocities[pid] += dtime * N * (node_state.internal_force[idn] + node_state.external_force[idn]) / node_state.mass[idn]
+                        particles.positions[pid]  += dtime * N * node_state.momentum[idn] / node_state.mass[idn]
+                        vI = node_state.momentum[idn] / node_state.mass[idn]
 
-                    Lp += np.outer(vI, dNdx) # velocity gradient contribution from this node
+                    Lp += np.outer(vI, dNdx)
 
-                F = (I + Lp * dtime) @ Fp[pid].reshape(2, 2) # update deformation gradient
-                Fp[pid] = F.reshape(4) # store updated deformation gradient
-                Vp[pid] = np.linalg.det(F) * Vp0[pid] # update particle volume from deformation gradient
-                dEps = 0.5 * dtime * (Lp + Lp.T) # strain increment from velocity gradient
-                dsigma = C @ np.array([dEps[0, 0], dEps[1, 1], 2.0 * dEps[0, 1]]) # stress increment from strain increment using elasticity matrix
-                s[pid] += dsigma # update particle stress
-                eps[pid] += np.array([dEps[0, 0], dEps[1, 1], 2.0 * dEps[0, 1]]) # update particle strain
-                
-                k += 0.5 * (vp[pid, 0]**2 + vp[pid, 1]**2) * Mp[pid] # kinetic energy contribution from this particle
-                u += 0.5 * Vp[pid] * s[pid] @ eps[pid] # strain energy contribution from this particle
+                F = (I + Lp * dtime) @ particles.deformation_gradient[pid].reshape(2, 2)
+                particles.deformation_gradient[pid] = F.reshape(4)
+                particles.volume[pid] = np.linalg.det(F) * particles.initial_volume[pid]
+                dEps = 0.5 * dtime * (Lp + Lp.T)
+                dEps_vec = np.array([dEps[0, 0], dEps[1, 1], 2.0 * dEps[0, 1]])
+                particles.stress[pid]  += material.elasticity_matrix @ dEps_vec
+                particles.strain[pid]  += dEps_vec
 
-        pos_history.append(xp.copy()) # store particle positions for this time step
-        vel_history.append(vp.copy()) # store particle velocities for this time step
-        ta.append(t) # store time for this time step
-        ka.append(k) # store kinetic energy for this time step
-        sa.append(u) # store strain energy for this time step
+                k += 0.5 * (particles.velocities[pid, 0]**2 + particles.velocities[pid, 1]**2) * particles.mass[pid]
+                u += 0.5 * particles.volume[pid] * particles.stress[pid] @ particles.strain[pid]
 
-        pElems, mpoints = build_particle_element_map(xp, mesh) # update particle-element mapping for next step
+        ta.append(t)
+        ka.append(k)
+        sa.append(u)
 
-        t += dtime # increment time
+        if vtk_output_dir is not None and istep % vtk_interval == 0:
+            fname = write_particles_vtp(
+                particles.positions, particles.velocities,
+                particles.stress, particles.strain,
+                istep, t, vtk_output_dir,
+            )
+            vtk_entries.append((t, fname))
+
+        _, mpoints = build_particle_element_map(particles.positions, mesh)
+
+        t += dtime
 
     return {
         'time': np.array(ta),
         'kinetic': np.array(ka),
         'strain': np.array(sa),
-        'pos': pos_history,
-        'vel': vel_history,
-        'pElems': pElems,
-        'mpoints': mpoints,
-        'xp': xp,
-        'vp': vp,
-        'Mp': Mp,
-        'Vp': Vp,
-        'Fp': Fp,
-        's': s,
-        'eps': eps,
-        'node_state': node_state,
+        'vtk_entries': vtk_entries,
     }
