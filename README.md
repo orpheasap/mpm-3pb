@@ -1,6 +1,10 @@
 # mpm-3pb
 A uni project for simulating 3 point bending with the material point method in python
 
+![damage](screenshots/damage_3pb)
+
+![damage](screenshots/von_misses_3pb)
+
 # MUSL with Elasto-Plastic Constitutive Model (Johnson-Cook + Mie-Grüneisen)
 
 ---
@@ -174,4 +178,3 @@ A uni project for simulating 3 point bending with the material point method in p
 - The **polar decomposition** in step 27 removes rigid-body rotations before the constitutive update, making the hypoelastic stress integration objective.
 - The **radial return** in step 29f is exact for von Mises plasticity with isotropic hardening under the assumption that $\sigma_f$ is constant during the return step.
 - The **damage variable** $D$ enters the shear modulus ($G' = (1-D)G$), the EOS, and the flow stress, providing full coupling between damage and the mechanical response.
-- For titanium (Ti-6Al-4V), typical Johnson-Cook constants are: $A=997.9$ MPa, $B=653.1$ MPa, $n=0.45$, $C=0.0198$, $m=0.7$, $T_m=1878$ K.
