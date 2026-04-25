@@ -89,25 +89,18 @@ A uni project for simulating 3 point bending with the material point method in p
 
 **29: Plasticity update** — compute ${\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d}$ and $\varepsilon_p^{p,t+\Delta t}$
 
-> **29a.** Damaged shear modulus: $G' = (1 - D_p^t)\,G$
->
-> **29b.** Elastic trial deviatoric stress: ${\boldsymbol{\sigma}'}_{\text{trial}}^{d} = {\boldsymbol{\sigma}'}_{p,t}^{d} + 2G'\,\Delta t\,\mathbf{d}_p^d$
->
-> **29c.** Trial von Mises stress: $\sigma_{\text{trial}}'^{\,\text{eq}} = \sqrt{\tfrac{3}{2}\,{\boldsymbol{\sigma}'}_{\text{trial}}^{d} : {\boldsymbol{\sigma}'}_{\text{trial}}^{d}}$
->
-> **29d.** JC flow stress: $\sigma_f = \left[A + B\!\left(\varepsilon_p^{p,t}\right)^n\right]\!\left[1 + C\ln\dot{\varepsilon}_p^*\right]\!\left[1-(T^*)^m\right](1-D_p^t)$
->
-> **29e. If** $\sigma_{\text{trial}}'^{\,\text{eq}} < \sigma_f$ **(elastic):** ${\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} = {\boldsymbol{\sigma}'}_{\text{trial}}^{d}$, $\quad\varepsilon_p^{p,t+\Delta t} = \varepsilon_p^{p,t}$
->
-> **29f. Else (plastic — radial return):** $\Delta\varepsilon_p = (\sigma_{\text{trial}}'^{\,\text{eq}} - \sigma_f)/(3G')$, $\quad\varepsilon_p^{p,t+\Delta t} = \varepsilon_p^{p,t} + \Delta\varepsilon_p$, $\quad{\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} = (\sigma_f / \sigma_{\text{trial}}'^{\,\text{eq}})\,{\boldsymbol{\sigma}'}_{\text{trial}}^{d}$
->
-> **29g. End if**
+- **29a.** Damaged shear modulus: $G' = (1 - D_p^t)\,G$
+- **29b.** Elastic trial deviatoric stress: ${\boldsymbol{\sigma}'}_{\text{trial}}^{d} = {\boldsymbol{\sigma}'}_{p,t}^{d} + 2G'\,\Delta t\,\mathbf{d}_p^d$
+- **29c.** Trial von Mises stress: $\sigma_{\text{trial}}'^{\,\text{eq}} = \sqrt{\tfrac{3}{2}\,{\boldsymbol{\sigma}'}_{\text{trial}}^{d} : {\boldsymbol{\sigma}'}_{\text{trial}}^{d}}$
+- **29d.** JC flow stress: $\sigma_f = \left[A + B\!\left(\varepsilon_p^{p,t}\right)^n\right]\!\left[1 + C\ln\dot{\varepsilon}_p^*\right]\!\left[1-(T^*)^m\right](1-D_p^t)$
+- **29e. If** $\sigma_{\text{trial}}'^{\,\text{eq}} < \sigma_f$ **(elastic):** ${\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} = {\boldsymbol{\sigma}'}_{\text{trial}}^{d}$, $\quad\varepsilon_p^{p,t+\Delta t} = \varepsilon_p^{p,t}$
+- **29f. Else (plastic — radial return):** $\Delta\varepsilon_p = (\sigma_{\text{trial}}'^{\,\text{eq}} - \sigma_f)/(3G')$, $\quad\varepsilon_p^{p,t+\Delta t} = \varepsilon_p^{p,t} + \Delta\varepsilon_p$, $\quad{\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} = (\sigma_f / \sigma_{\text{trial}}'^{\,\text{eq}})\,{\boldsymbol{\sigma}'}_{\text{trial}}^{d}$
+- **29g. End if**
 
 **30: Pressure update** — compute $\hat{p}_{p,t+\Delta t}$ via EOS
 
-> *Mie-Grüneisen:* $\eta_p = \rho_p^{t+\Delta t}(1-D_p^t)/\rho_p^0\ (\hat{p}>0)$, $\quad\eta_p = \rho_p^{t+\Delta t}/\rho_p^0\ \text{(otherwise)}$, $\quad\hat{p}_p = \dfrac{\rho_0(1-D_p^t)c_0^2(\eta_p-1)\!\left[\eta_p - \frac{\Gamma_0}{2}(\eta_p-1)\right]}{\left[\eta_p - S_\alpha(\eta_p-1)\right]^2} + \Gamma_0\,e_p$
->
-> *Linear EOS (alternative):* $\hat{p}_p = -K(1-\det\mathbf{F}_p^{t+\Delta t})(1-D_p^t)$
+- *Mie-Grüneisen:* $\eta_p = \rho_p^{t+\Delta t}(1-D_p^t)/\rho_p^0\ (\hat{p}>0)$, $\quad\eta_p = \rho_p^{t+\Delta t}/\rho_p^0\ \text{(otherwise)}$, $\quad\hat{p}_p = \dfrac{\rho_0(1-D_p^t)c_0^2(\eta_p-1)\!\left[\eta_p - \frac{\Gamma_0}{2}(\eta_p-1)\right]}{\left[\eta_p - S_\alpha(\eta_p-1)\right]^2} + \Gamma_0\,e_p$
+- *Linear EOS (alternative):* $\hat{p}_p = -K(1-\det\mathbf{F}_p^{t+\Delta t})(1-D_p^t)$
 
 **31:** Assemble and rotate stress: $\boldsymbol{\sigma'}_{p,t+\Delta t} = {\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} + \hat{p}_{p,t+\Delta t}\,\mathbf{I}$, $\quad\boldsymbol{\sigma}_{p,t+\Delta t} = \mathbf{R}_p\,\boldsymbol{\sigma'}_{p,t+\Delta t}\,\mathbf{R}_p^{\mathrm{T}}$
 
@@ -115,17 +108,12 @@ A uni project for simulating 3 point bending with the material point method in p
 
 **33: Damage update** — compute $D_p^{t+\Delta t}$
 
-> **33a.** Stress triaxiality: $\sigma^* = -\hat{p}_{p,t+\Delta t} / \sigma_{\text{eq},p}^{t+\Delta t}$
->
-> **33b.** JC strain at failure: $\varepsilon_f = \left[D_1 + D_2\exp(D_3\sigma^*)\right]\!\left[1 + D_4\ln\dot{\varepsilon}_p^*\right]\!\left[1 + D_5 T^*\right]$
->
-> **33c.** Damage initiation variable: $D_{\text{init},p}^{t+\Delta t} = D_{\text{init},p}^{t} + \Delta\varepsilon_p / \varepsilon_f$
->
-> **33d. If** $D_{\text{init},p}^{t+\Delta t} \geq 1$: $D_p^{t+\Delta t} = \min\!\left(10(D_{\text{init},p}^{t+\Delta t} - 1),\ 1\right)$
->
-> **33e. Else:** $D_p^{t+\Delta t} = 0$
->
-> **33f. End if**
+- **33a.** Stress triaxiality: $\sigma^* = -\hat{p}_{p,t+\Delta t} / \sigma_{\text{eq},p}^{t+\Delta t}$
+- **33b.** JC strain at failure: $\varepsilon_f = \left[D_1 + D_2\exp(D_3\sigma^*)\right]\!\left[1 + D_4\ln\dot{\varepsilon}_p^*\right]\!\left[1 + D_5 T^*\right]$
+- **33c.** Damage initiation variable: $D_{\text{init},p}^{t+\Delta t} = D_{\text{init},p}^{t} + \Delta\varepsilon_p / \varepsilon_f$
+- **33d. If** $D_{\text{init},p}^{t+\Delta t} \geq 1$: $D_p^{t+\Delta t} = \min\!\left(10(D_{\text{init},p}^{t+\Delta t} - 1),\ 1\right)$
+- **33e. Else:** $D_p^{t+\Delta t} = 0$
+- **33f. End if**
 
 **34: end**
 
