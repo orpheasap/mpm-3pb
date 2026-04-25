@@ -114,7 +114,7 @@ def run_mpm_solver(mesh, particles, material, traction,
                     node_state.internal_force[idn, 0] -= particles.volume[pid] * (stress[0] * dNdx[0] + stress[2] * dNdx[1])
                     node_state.internal_force[idn, 1] -= particles.volume[pid] * (stress[2] * dNdx[0] + stress[1] * dNdx[1])
                     node_state.external_force[idn, 1] -= g * N * particles.mass[pid]
-                    if particles.neumann_particles[pid]:
+                    if particles.neumann_particles[pid] and t < 0.01 * time:
                         node_state.external_force[idn, 1] -= traction * N * particles.volume[pid]
 
         node_state.momentum += (node_state.internal_force + node_state.external_force) * dtime

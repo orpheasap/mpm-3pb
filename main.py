@@ -32,7 +32,7 @@ def print_subsection(title):
 #E = 110e9  # Young's modulus in Pascals
 #nu = 0.34   # Poisson's ratio
 #rho = 4430  # Density in kg/m^3
-E = 2e5
+E = 1e5
 nu = 0.3
 rho = 1000
 
@@ -58,7 +58,7 @@ print(f"Total elements: {mesh.elemCount}")
 print(f"Cell size: dx = {mesh.deltax:.4f}, dy = {mesh.deltay:.4f}")
 
 #----- Particle distribution ------
-Lxp = 7
+Lxp = 9
 Lyp = 1
 
 noX = 32
@@ -105,11 +105,11 @@ for e in range(len(pmesh.element)):
 
 particles.set_initial_state()
 
-w = .2 # semi-width of force application region mm
+w = .3 # semi-width of force application region mm
 xc = 4.5 # center of force application region mm
 for p in range(particles.count): # loop over particles to identify those in the Neumann BC region
     x = particles.positions[p, 0]
-    if abs(x - xc) <= w and particles.positions[p, 1] >= max_p_height:
+    if abs(x - xc) <= w and abs(particles.positions[p, 1] - max_p_height) < 1e-6:
         particles.neumann_particles[p] = True
 
 print("id of particles with Neumann BC applied:", np.where(particles.neumann_particles)[0])
@@ -158,14 +158,14 @@ print(f"NodeState initialized for {mesh.nodeCount} nodes")
 #----- Solver ------
 c = np.sqrt(material.E/material.density)
 dtcrit = mesh.deltax/c
-dtime = 1e-5
-time = 1e3 * dtime/3 # total time
+dtime = 1e-3
+time = 1e3 * dtime /2# total time
 print_section("Solver")
 print(f"Critical time step (CFL condition): {dtcrit:.2e} seconds")
 print(f"Time step: {dtime}")
 print(f"Total time: {time}")
 
-F = 1e9 #1e6 # magnitude of applied force in Neumann BC region (N)
+F = 1 #1e6 # magnitude of applied force in Neumann BC region (N)
 traction = F / (2 * w) # convert force to traction (N/m) assuming uniform distribution over the region of width 2w
 
 shutil.rmtree('vtk_output', ignore_errors=True)
@@ -199,7 +199,7 @@ fig, ax = plot_mpm_domain(
     mesh.element,
     particles.positions,
     figsize=(12, 8),
-    particle_y_scale=20.0, # magnify y displacements for better visibility
+    particle_y_scale=1.0, # magnify y displacements for better visibility
     particle_y_ref=particles.initial_positions,
 )
 ax.set_title('Final Particle Positions After Solver (Y displacement magnified x50)', fontsize=14, fontweight='bold')

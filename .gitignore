@@ -1,3 +1,5 @@
+profile_output.prof
+profile_cmds.txt
 vtk_output/
 # Byte-compiled / optimized / DLL files
 __pycache__/
