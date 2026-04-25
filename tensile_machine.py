@@ -9,7 +9,7 @@ from src.particle import ParticleSet
 from src.lagrange_basis import lagrange_basis_Q4
 from src.quadrature import gauss_2D
 from src.plot_utils import plot_mpm_domain, plot_particles
-from src.solver import run_mpm_solver, NodeState, build_particle_element_map
+from src.solver_tensile_machine import run_mpm_solver, NodeState, build_particle_element_map
 from src.vtk_export import write_pvd
 
 
@@ -54,10 +54,10 @@ print(f"JC: A={A:.2e}, B={B:.2e}, n={n}, C={C}, eps_dot_0={eps_dot_0}")
 print(f"P-wave speed: {material.wave_speed:.2f} m/s")
 
 # ----- Computational grid -----
-Lx   = 9
-Ly   = 3
-numx = 36
-numy = 12
+Lx   = 1.5
+Ly   = 5
+numx = 12
+numy = 36
 
 mesh = Mesh(Lx, Ly, numx, numy)
 print_section("Computational Grid")
@@ -67,13 +67,13 @@ print(f"Total nodes: {mesh.nodeCount},  Total elements: {mesh.elemCount}")
 print(f"Cell size: dx = {mesh.deltax:.4f}, dy = {mesh.deltay:.4f}")
 
 # ----- Particle distribution -----
-Lxp = 9
-Lyp = 1
-noX = 32
-noY = 4
+Lxp = .5
+Lyp = 3
+noX = 4
+noY = 16
 
 pmesh = Mesh(Lxp, Lyp, noX, noY)
-pmesh.node[:, 1] += 3/2 - Lyp/2   # centre beam vertically in domain
+pmesh.node[:, 0] += Lx/2 - Lxp/2   # centre beam horizontaly in domain
 
 print_section("Particle Mesh")
 print(f"Domain size: Lxp = {Lxp}, Lyp = {Lyp}")
@@ -106,12 +106,10 @@ for e in range(len(pmesh.element)):
 
 particles.set_initial_state()
 
-# Neumann BC: downward traction applied at the top-centre of the beam
-w  = 0.3   # semi-width of loading patch (m)
-xc = 4.5   # centre of loading patch (m)
+# Dirichlet BC: top particles being pulled
 for p in range(particles.count):
     x = particles.positions[p, 0]
-    if abs(x - xc) <= w and abs(particles.positions[p, 1] - max_p_height) < 1e-6:
+    if abs(particles.positions[p, 1] - max_p_height) < 1e-6:
         particles.neumann_particles[p] = True
 
 print_section("Particle Initialisation")
@@ -145,33 +143,32 @@ node_state = NodeState(mesh.nodeCount)
 
 dtcrit = mesh.deltax / material.wave_speed
 dtime  = 0.5 * dtcrit      # safety factor of 0.5 on CFL
-time   = 500 * dtime       # total simulation time
+time   = 1500 * dtime       # total simulation time
 
-# Force well above first yield (~27 MN) to drive plasticity and damage
-F        = 1e10             # applied force magnitude (N)
-traction = F / (2 * w)     # N/m, uniform over patch width 2w
 
 print_section("Solver")
 print(f"CFL critical dt: {dtcrit:.2e} s")
 print(f"Using dt:        {dtime:.2e} s  (safety factor 0.5)")
 print(f"Total time:      {time:.2e} s  ({int(time/dtime)} steps)")
-print(f"Traction:        {traction:.2e} N/m")
 
 shutil.rmtree('vtk_output', ignore_errors=True)
+
+v_pull   = 100.0   # upward grip speed (m/s) — dynamic tensile test
+print(f"total elongation : {time*v_pull:.2e}")
 
 # %%
 solver_results = run_mpm_solver(
     mesh=mesh,
     particles=particles,
     material=material,
-    traction=traction,
-    g=9.81,
+    g=0.0,
     dtime=dtime,
     time=time,
     alpha=0.99,
     node_state=node_state,
     vtk_output_dir='vtk_output',
     vtk_interval=10,
+    v_pull=v_pull,
 )
 
 print_section("Solver Complete")

@@ -95,7 +95,7 @@ A uni project for simulating 3 point bending with the material point method in p
 
 > **29c.** Trial von Mises stress: $\sigma_{\text{trial}}'^{\,\text{eq}} = \sqrt{\tfrac{3}{2}\,{\boldsymbol{\sigma}'}_{\text{trial}}^{d} : {\boldsymbol{\sigma}'}_{\text{trial}}^{d}}$
 
-> **29d.** JC flow stress: $\sigma_f = \left[A + B\!\left(\varepsilon_p^{p,t}\right)^n\right]\!\left[1 + C\ln\dot{\varepsilon}_p^*\right]\!\left[1-(T^*)^m\right](1-D_p^t)
+> **29d.** JC flow stress: $\sigma_f = \left[A + B\!\left(\varepsilon_p^{p,t}\right)^n\right]\!\left[1 + C\ln\dot{\varepsilon}_p^*\right]\!\left[1-(T^*)^m\right](1-D_p^t)$
 
 > **29e. If** $\sigma_{\text{trial}}'^{\,\text{eq}} < \sigma_f$ **(elastic):** ${\boldsymbol{\sigma}'}_{p,t+\Delta t}^{d} = {\boldsymbol{\sigma}'}_{\text{trial}}^{d}$, $\quad\varepsilon_p^{p,t+\Delta t} = \varepsilon_p^{p,t}$
 

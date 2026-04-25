@@ -150,22 +150,29 @@ def _constitutive_update(mat, pid, particles, dtime, Lp):
 
 # ── Main solver ───────────────────────────────────────────────────────────────
 
-def run_mpm_solver(mesh, particles, material, traction,
+def run_mpm_solver(mesh, particles, material,
                    g=9.81, dtime=1e-5, time=1e-2, alpha=0.99,
-                   node_state=None, vtk_output_dir=None, vtk_interval=10):
+                   node_state=None, vtk_output_dir=None, vtk_interval=10,
+                   v_pull=1e-3):
     """
-    MUSL explicit MPM solver with Johnson-Cook elasto-plastic constitutive model.
+    MUSL explicit MPM solver — tensile machine variant.
+
+    Boundary conditions
+    -------------------
+    Bottom (bNodes, y=0) : fixed — zero velocity (clamp).
+    Top    (neumann_particles) : prescribed constant velocity [0, v_pull].
+    Left/right mesh edges are in the background and carry no particles.
 
     Parameters
     ----------
     mesh       : Mesh object
-    particles  : ParticleSet object
+    particles  : ParticleSet object — neumann_particles marks top (pulled) particles
     material   : Material object
-    traction   : Applied downward traction for Neumann BC (N/m)
     g          : Gravity magnitude (m/s^2)
     dtime      : Time step (s)
     time       : Total simulation time (s)
     alpha      : FLIP/PIC blending (1 = pure FLIP, 0 = pure PIC)
+    v_pull     : Prescribed upward speed of the top grip (m/s)
     """
     node_state = node_state or NodeState(mesh.nodeCount)
     if node_state.node_count != mesh.nodeCount:
@@ -184,12 +191,14 @@ def run_mpm_solver(mesh, particles, material, traction,
         node_state.reset()
 
         # ── 8-12: P2G ─────────────────────────────────────────────────────────
+        top_nodes_set = set()
         for e in range(mesh.elemCount):
             for pid in mpoints[e]:
                 sigma = particles.stress[pid]
                 mp    = particles.mass[pid]
                 Vp    = particles.volume[pid]
                 vp    = particles.velocities[pid]
+                is_top = particles.neumann_particles[pid]
                 for idn in mesh.element[e]:
                     x = particles.positions[pid] - mesh.node[idn]
                     N, dNdx = get_mpm2d_shape(x, mesh.deltax, mesh.deltay)
@@ -200,16 +209,24 @@ def run_mpm_solver(mesh, particles, material, traction,
                     node_state.internal_force[idn, 0] -= Vp * (sigma[0]*dNdx[0] + sigma[2]*dNdx[1])
                     node_state.internal_force[idn, 1] -= Vp * (sigma[2]*dNdx[0] + sigma[1]*dNdx[1])
                     node_state.external_force[idn, 1] -= g * N * mp
-                    if particles.neumann_particles[pid]:
-                        node_state.external_force[idn, 1] -= traction * N * Vp
+                    if is_top:
+                        top_nodes_set.add(idn)
+        top_nodes = np.fromiter(top_nodes_set, dtype=int) if top_nodes_set else np.array([], dtype=int)
 
         # ── 14-15: Update momenta and Dirichlet BCs ───────────────────────────
         f_total  = node_state.internal_force + node_state.external_force
         mv_tilde = node_state.momentum + f_total * dtime
+
+        # Fixed: bottom clamp (bNodes at y=0 covers bottom of bar)
         for nodes in [mesh.lNodes, mesh.rNodes, mesh.bNodes, mesh.tNodes]:
             if nodes.size > 0:
                 node_state.momentum[nodes] = 0.0
                 mv_tilde[nodes]            = 0.0
+
+        # Prescribed: top grip — constant pull velocity
+        if top_nodes.size > 0:
+            mv_tilde[top_nodes, 0] = 0.0
+            mv_tilde[top_nodes, 1] = node_state.mass[top_nodes] * v_pull
 
         # ── 16-21: MUSL double mapping ────────────────────────────────────────
         m_safe  = np.where(node_state.mass > 0, node_state.mass, 1.0)
@@ -254,6 +271,11 @@ def run_mpm_solver(mesh, particles, material, traction,
         for nodes in [mesh.lNodes, mesh.rNodes, mesh.bNodes, mesh.tNodes]:
             if nodes.size > 0:
                 mv_new[nodes] = 0.0
+
+        # Prescribed top velocity — same constraint on second mapping
+        if top_nodes.size > 0:
+            mv_new[top_nodes, 0] = 0.0
+            mv_new[top_nodes, 1] = node_state.mass[top_nodes] * v_pull
 
         # ── 22-34: G2P and constitutive update ───────────────────────────────
         # 22: Nodal velocity from second mapping
