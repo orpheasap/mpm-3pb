@@ -9,6 +9,8 @@ class Material:
         A, B, n, C, eps_dot_0,
         # Johnson-Cook damage (optional, no thermal term)
         D1=None, D2=None, D3=None, D4=None,
+        # Mie-Grüneisen EOS parameters (optional)
+        c0=None, Gamma0=None, S_alpha=None, chi=0.9,
     ):
         # Elastic
         self.initial_density = rho
@@ -35,3 +37,12 @@ class Material:
         self.D2 = D2
         self.D3 = D3
         self.D4 = D4
+
+        # Mie-Grüneisen EOS: p = rho0*c0^2*(eta-1)*[eta - Gamma0/2*(eta-1)] /
+        #                         [eta - S_alpha*(eta-1)]^2  +  Gamma0 * e
+        # chi: Taylor-Quinney coefficient for adiabatic energy update (e += chi*sigma_f*deps_p)
+        self.mg_enabled = all(x is not None for x in [c0, Gamma0, S_alpha])
+        self.c0      = c0
+        self.Gamma0  = Gamma0
+        self.S_alpha = S_alpha
+        self.chi     = chi

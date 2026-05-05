@@ -70,6 +70,10 @@ def _jc_flow_stress(mat, eps_p, eps_dot, D):
 
 def _constitutive_update(mat, pid, particles, dtime, Lp):
     """MUSL-EP constitutive update (steps 24-34) for a single particle."""
+    if particles.D[pid] >= 1.0:
+        particles.velocities[pid] = 0.0
+        return
+
     I2 = np.eye(2)
 
     # 24: Deformation gradient

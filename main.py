@@ -55,9 +55,9 @@ print(f"P-wave speed: {material.wave_speed:.2f} m/s")
 
 # ----- Computational grid -----
 Lx   = 9
-Ly   = 3
+Ly   = 4
 numx = 36
-numy = 12
+numy = 16
 
 mesh = Mesh(Lx, Ly, numx, numy)
 print_section("Computational Grid")
@@ -73,7 +73,7 @@ noX = 32
 noY = 4
 
 pmesh = Mesh(Lxp, Lyp, noX, noY)
-pmesh.node[:, 1] += 3/2 - Lyp/2   # centre beam vertically in domain
+pmesh.node[:, 1] += 2.7 #3/2 - Lyp/2   # centre beam vertically in domain
 
 print_section("Particle Mesh")
 print(f"Domain size: Lxp = {Lxp}, Lyp = {Lyp}")
@@ -112,14 +112,15 @@ xc = 4.5   # centre of loading patch (m)
 for p in range(particles.count):
     x = particles.positions[p, 0]
     if abs(x - xc) <= w and abs(particles.positions[p, 1] - max_p_height) < 1e-6:
-        particles.neumann_particles[p] = True
+        #particles.neumann_particles[p] = True
+        particles.dirichlet_particles[p] = True
 
 print_section("Particle Initialisation")
 print(f"Number of particles: {particles.count}")
 print(f"Total mass:   {np.sum(particles.mass):.4f} kg")
 print(f"Total volume: {np.sum(particles.volume):.4f} m²")
 print(f"Neumann BC particles: {np.sum(particles.neumann_particles)}")
-
+print(f"Dirichlet BC particles: {np.sum(particles.dirichlet_particles)}")
 # ----- Visualise initial configuration -----
 print_section("Visualisation — Initial Configuration")
 fig, ax = plot_mpm_domain(
@@ -127,9 +128,9 @@ fig, ax = plot_mpm_domain(
     figsize=(12, 8), particle_y_scale=1.0,
     particle_y_ref=particles.initial_positions,
 )
-neumann_pos = particles.positions[particles.neumann_particles]
-ax.scatter(neumann_pos[:, 0], neumann_pos[:, 1],
-           s=32, c='green', marker='o', alpha=0.9, label='Neumann BC')
+dirichlet_pos = particles.positions[particles.dirichlet_particles]
+ax.scatter(dirichlet_pos[:, 0], dirichlet_pos[:, 1],
+           s=32, c='green', marker='o', alpha=0.9, label='Dirichlet BC')
 ax.set_title('Initial Particle Positions', fontsize=14, fontweight='bold')
 plt.show()
 
@@ -141,21 +142,21 @@ print(f"Particles located: {sum(len(m) for m in particles.mpoints)}")
 print(f"Elements with particles: {sum(1 for m in particles.mpoints if m)} / {mesh.elemCount}")
 
 # ----- Solver setup -----
-node_state = NodeState(mesh.nodeCount)
+node_state  = NodeState(mesh.nodeCount)
+v_dirichlet = [0.0, -30]   # indenter speed: downward at 1.0 m/s
 
 dtcrit = mesh.deltax / material.wave_speed
 dtime  = 0.5 * dtcrit      # safety factor of 0.5 on CFL
-time   = 500 * dtime       # total simulation time
+time   = 3500 * dtime       # total simulation time
 
-# Force well above first yield (~27 MN) to drive plasticity and damage
-F        = 1e10             # applied force magnitude (N)
-traction = F / (2 * w)     # N/m, uniform over patch width 2w
+total_displacement = v_dirichlet[1] * time
 
 print_section("Solver")
 print(f"CFL critical dt: {dtcrit:.2e} s")
 print(f"Using dt:        {dtime:.2e} s  (safety factor 0.5)")
 print(f"Total time:      {time:.2e} s  ({int(time/dtime)} steps)")
-print(f"Traction:        {traction:.2e} N/m")
+print(f"Indenter speed:  {v_dirichlet} m/s")
+print(f"Total indenter displacement: {total_displacement:.4f} m")
 
 shutil.rmtree('vtk_output', ignore_errors=True)
 
@@ -164,7 +165,7 @@ solver_results = run_mpm_solver(
     mesh=mesh,
     particles=particles,
     material=material,
-    traction=traction,
+    traction=0.0,
     g=9.81,
     dtime=dtime,
     time=time,
@@ -172,11 +173,12 @@ solver_results = run_mpm_solver(
     node_state=node_state,
     vtk_output_dir='vtk_output',
     vtk_interval=10,
+    v_dirichlet=v_dirichlet,
 )
 
 print_section("Solver Complete")
 print(f"Steps run:       {len(solver_results['time'])}")
-print(f"Final KE:        {solver_results['kinetic'][-1]:.4e} J")
+#print(f"Final KE:        {solver_results['kinetic'][-1]:.4e} J")
 
 pvd_path = write_pvd('vtk_output', solver_results['vtk_entries'])
 print(f"VTK steps saved: {len(solver_results['vtk_entries'])}  →  {pvd_path}")

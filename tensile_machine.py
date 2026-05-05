@@ -26,24 +26,23 @@ def print_subsection(title):
     print(f"\n{divider}\n{title}\n{divider}")
 
 
-# ----- Material Properties — Aluminium 2024-T3 -----
-rho  = 2700.0   # density           (kg/m³)
-E    = 73.1e9   # Young's modulus   (Pa)
-nu   = 0.33     # Poisson's ratio
+# ----- Material Properties — Gelatin (Jell-O approximation) -----
+rho  = 1020.0   # density           (kg/m³)  — close to water
+E    = 5e3      # Young's modulus   (Pa)     — ~5 kPa, very soft gel
+nu   = 0.48     # Poisson's ratio            — nearly incompressible
 
 # Johnson-Cook flow stress: sigma_f = [A + B*eps_p^n][1 + C*ln(eps_dot*)]
-# Source: Lesuer (2000), Wierzbicki et al. (2005)
-A         = 369e6  # initial yield stress    (Pa)
-B         = 684e6  # hardening modulus       (Pa)
-n         = 0.73   # hardening exponent
-C         = 0.0083 # strain-rate sensitivity
+A         = 300.0  # initial yield stress    (Pa)  — yields at ~300 Pa
+B         = 500.0  # hardening modulus       (Pa)
+n         = 0.5    # hardening exponent
+C         = 0.05   # strain-rate sensitivity        — gels are more rate-sensitive than metals
 eps_dot_0 = 1.0    # reference strain rate   (1/s)
 
 # Johnson-Cook damage: eps_f = [D1 + D2*exp(D3*sigma*)][1 + D4*ln(eps_dot*)]
-D1 =  0.13   # fracture strain offset
-D2 =  0.13   # fracture strain scale
-D3 = -1.5    # triaxiality sensitivity (negative: tension is more damaging)
-D4 =  0.011  # strain-rate sensitivity of damage
+D1 =  0.30   # fracture strain offset             — fractures at ~30-50% strain
+D2 =  0.40   # fracture strain scale
+D3 = -1.5    # triaxiality sensitivity
+D4 =  0.05   # strain-rate sensitivity of damage
 
 material = Material(rho, E, nu, A, B, n, C, eps_dot_0, D1=D1, D2=D2, D3=D3, D4=D4)
 
@@ -54,10 +53,10 @@ print(f"JC: A={A:.2e}, B={B:.2e}, n={n}, C={C}, eps_dot_0={eps_dot_0}")
 print(f"P-wave speed: {material.wave_speed:.2f} m/s")
 
 # ----- Computational grid -----
-Lx   = 1.5
-Ly   = 5
-numx = 12
-numy = 36
+Lx   = 3
+Ly   = 3.2
+numx = 24
+numy = 24
 
 mesh = Mesh(Lx, Ly, numx, numy)
 print_section("Computational Grid")
@@ -80,7 +79,7 @@ print(f"Domain size: Lxp = {Lxp}, Lyp = {Lyp}")
 print(f"Grid resolution: {noX} x {noY} elements")
 
 # ----- Particle initialisation -----
-ngp    = 3
+ngp    = 5
 W, Q   = gauss_2D(ngp)
 pCount = len(pmesh.element) * len(W)
 
@@ -143,7 +142,7 @@ node_state = NodeState(mesh.nodeCount)
 
 dtcrit = mesh.deltax / material.wave_speed
 dtime  = 0.5 * dtcrit      # safety factor of 0.5 on CFL
-time   = 1500 * dtime       # total simulation time
+time   = 2700 * dtime       # total simulation time
 
 
 print_section("Solver")
@@ -153,15 +152,15 @@ print(f"Total time:      {time:.2e} s  ({int(time/dtime)} steps)")
 
 shutil.rmtree('vtk_output', ignore_errors=True)
 
-v_pull   = 100.0   # upward grip speed (m/s) — dynamic tensile test
-print(f"total elongation : {time*v_pull:.2e}")
+v_pull   = -0.1   # upward grip speed (m/s) — slow pull on soft gel
+print(f"total elongation : {time*v_pull:.2e} m")
 
 # %%
 solver_results = run_mpm_solver(
     mesh=mesh,
     particles=particles,
     material=material,
-    g=0.0,
+    g=0,
     dtime=dtime,
     time=time,
     alpha=0.99,

@@ -28,12 +28,16 @@ class ParticleSet:
         self.D_init = np.zeros(count)   # damage initiation variable
         self.D      = np.zeros(count)   # damage variable in [0, 1]
 
+        # Internal energy density [J/m³] — used by Mie-Grüneisen EOS
+        self.e = np.zeros(count)
+
         # Reference state and BCs
         self.initial_positions = np.zeros((count, 2))
         self.initial_volume    = np.ones(count)
         self.pElems            = np.zeros(count, dtype=int)
         self.mpoints           = []
         self.neumann_particles = np.zeros(count, dtype=bool)
+        self.dirichlet_particles = np.zeros(count, dtype=bool)
 
     # Current density — always consistent with mass and volume
     @property
