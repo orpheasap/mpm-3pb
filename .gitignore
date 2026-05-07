@@ -1,6 +1,7 @@
 profile_output.prof
 profile_cmds.txt
 vtk_output/
+particle_history.csv
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

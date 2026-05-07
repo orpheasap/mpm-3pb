@@ -9,7 +9,7 @@ from src.particle import ParticleSet
 from src.lagrange_basis import lagrange_basis_Q4
 from src.quadrature import gauss_2D
 from src.plot_utils import plot_mpm_domain, plot_particles
-from src.solver_tensile_machine import run_mpm_solver, NodeState, build_particle_element_map
+from src.solver2 import run_mpm_solver, NodeState, build_particle_element_map
 from src.vtk_export import write_pvd
 
 
@@ -26,23 +26,24 @@ def print_subsection(title):
     print(f"\n{divider}\n{title}\n{divider}")
 
 
-# ----- Material Properties — Gelatin (Jell-O approximation) -----
-rho  = 1020.0   # density           (kg/m³)  — close to water
-E    = 5e3      # Young's modulus   (Pa)     — ~5 kPa, very soft gel
-nu   = 0.48     # Poisson's ratio            — nearly incompressible
+# ----- Material Properties — Aluminium 2024-T3 -----
+rho  = 2700.0   # density           (kg/m³)
+E    = 73.1e9   # Young's modulus   (Pa)
+nu   = 0.33     # Poisson's ratio
 
 # Johnson-Cook flow stress: sigma_f = [A + B*eps_p^n][1 + C*ln(eps_dot*)]
-A         = 300.0  # initial yield stress    (Pa)  — yields at ~300 Pa
-B         = 500.0  # hardening modulus       (Pa)
-n         = 0.5    # hardening exponent
-C         = 0.05   # strain-rate sensitivity        — gels are more rate-sensitive than metals
+# Source: Lesuer (2000), Wierzbicki et al. (2005)
+A         = 369e6  # initial yield stress    (Pa)
+B         = 684e6  # hardening modulus       (Pa)
+n         = 0.73   # hardening exponent
+C         = 0.0083 # strain-rate sensitivity
 eps_dot_0 = 1.0    # reference strain rate   (1/s)
 
 # Johnson-Cook damage: eps_f = [D1 + D2*exp(D3*sigma*)][1 + D4*ln(eps_dot*)]
-D1 =  0.30   # fracture strain offset             — fractures at ~30-50% strain
-D2 =  0.40   # fracture strain scale
-D3 = -1.5    # triaxiality sensitivity
-D4 =  0.05   # strain-rate sensitivity of damage
+D1 =  0.13   # fracture strain offset
+D2 =  0.13   # fracture strain scale
+D3 = -1.5    # triaxiality sensitivity (negative: tension is more damaging)
+D4 =  0.011  # strain-rate sensitivity of damage
 
 material = Material(rho, E, nu, A, B, n, C, eps_dot_0, D1=D1, D2=D2, D3=D3, D4=D4)
 
@@ -53,10 +54,10 @@ print(f"JC: A={A:.2e}, B={B:.2e}, n={n}, C={C}, eps_dot_0={eps_dot_0}")
 print(f"P-wave speed: {material.wave_speed:.2f} m/s")
 
 # ----- Computational grid -----
-Lx   = 3
-Ly   = 3.2
-numx = 24
-numy = 24
+Lx   = 9
+Ly   = 4
+numx = 36
+numy = 16
 
 mesh = Mesh(Lx, Ly, numx, numy)
 print_section("Computational Grid")
@@ -66,20 +67,20 @@ print(f"Total nodes: {mesh.nodeCount},  Total elements: {mesh.elemCount}")
 print(f"Cell size: dx = {mesh.deltax:.4f}, dy = {mesh.deltay:.4f}")
 
 # ----- Particle distribution -----
-Lxp = .5
-Lyp = 3
-noX = 4
-noY = 16
+Lxp = 9
+Lyp = 1
+noX = 32
+noY = 4
 
 pmesh = Mesh(Lxp, Lyp, noX, noY)
-pmesh.node[:, 0] += Lx/2 - Lxp/2   # centre beam horizontaly in domain
+pmesh.node[:, 1] += 2.7 #3/2 - Lyp/2   # centre beam vertically in domain
 
 print_section("Particle Mesh")
 print(f"Domain size: Lxp = {Lxp}, Lyp = {Lyp}")
 print(f"Grid resolution: {noX} x {noY} elements")
 
 # ----- Particle initialisation -----
-ngp    = 5
+ngp    = 3
 W, Q   = gauss_2D(ngp)
 pCount = len(pmesh.element) * len(W)
 
@@ -105,18 +106,21 @@ for e in range(len(pmesh.element)):
 
 particles.set_initial_state()
 
-# Dirichlet BC: top particles being pulled
+# Neumann BC: downward traction applied at the top-centre of the beam
+w  = 0.3   # semi-width of loading patch (m)
+xc = 4.5   # centre of loading patch (m)
 for p in range(particles.count):
     x = particles.positions[p, 0]
-    if abs(particles.positions[p, 1] - max_p_height) < 1e-6:
-        particles.neumann_particles[p] = True
+    if abs(x - xc) <= w and abs(particles.positions[p, 1] - max_p_height) < 1e-6:
+        #particles.neumann_particles[p] = True
+        particles.dirichlet_particles[p] = True
 
 print_section("Particle Initialisation")
 print(f"Number of particles: {particles.count}")
 print(f"Total mass:   {np.sum(particles.mass):.4f} kg")
 print(f"Total volume: {np.sum(particles.volume):.4f} m²")
 print(f"Neumann BC particles: {np.sum(particles.neumann_particles)}")
-
+print(f"Dirichlet BC particles: {np.sum(particles.dirichlet_particles)}")
 # ----- Visualise initial configuration -----
 print_section("Visualisation — Initial Configuration")
 fig, ax = plot_mpm_domain(
@@ -124,9 +128,9 @@ fig, ax = plot_mpm_domain(
     figsize=(12, 8), particle_y_scale=1.0,
     particle_y_ref=particles.initial_positions,
 )
-neumann_pos = particles.positions[particles.neumann_particles]
-ax.scatter(neumann_pos[:, 0], neumann_pos[:, 1],
-           s=32, c='green', marker='o', alpha=0.9, label='Neumann BC')
+dirichlet_pos = particles.positions[particles.dirichlet_particles]
+ax.scatter(dirichlet_pos[:, 0], dirichlet_pos[:, 1],
+           s=32, c='green', marker='o', alpha=0.9, label='Dirichlet BC')
 ax.set_title('Initial Particle Positions', fontsize=14, fontweight='bold')
 plt.show()
 
@@ -138,41 +142,43 @@ print(f"Particles located: {sum(len(m) for m in particles.mpoints)}")
 print(f"Elements with particles: {sum(1 for m in particles.mpoints if m)} / {mesh.elemCount}")
 
 # ----- Solver setup -----
-node_state = NodeState(mesh.nodeCount)
+node_state  = NodeState(mesh.nodeCount)
+v_dirichlet = [0.0, -30]   # indenter speed: downward at 1.0 m/s
 
 dtcrit = mesh.deltax / material.wave_speed
 dtime  = 0.5 * dtcrit      # safety factor of 0.5 on CFL
-time   = 2700 * dtime       # total simulation time
+time   = 3500 * dtime       # total simulation time
 
+total_displacement = v_dirichlet[1] * time
 
 print_section("Solver")
 print(f"CFL critical dt: {dtcrit:.2e} s")
 print(f"Using dt:        {dtime:.2e} s  (safety factor 0.5)")
 print(f"Total time:      {time:.2e} s  ({int(time/dtime)} steps)")
+print(f"Indenter speed:  {v_dirichlet} m/s")
+print(f"Total indenter displacement: {total_displacement:.4f} m")
 
 shutil.rmtree('vtk_output', ignore_errors=True)
-
-v_pull   = -0.1   # upward grip speed (m/s) — slow pull on soft gel
-print(f"total elongation : {time*v_pull:.2e} m")
 
 # %%
 solver_results = run_mpm_solver(
     mesh=mesh,
     particles=particles,
     material=material,
-    g=0,
+    traction=0.0,
+    g=9.81,
     dtime=dtime,
     time=time,
     alpha=0.99,
     node_state=node_state,
     vtk_output_dir='vtk_output',
     vtk_interval=10,
-    v_pull=v_pull,
+    v_dirichlet=v_dirichlet,
 )
 
 print_section("Solver Complete")
 print(f"Steps run:       {len(solver_results['time'])}")
-print(f"Final KE:        {solver_results['kinetic'][-1]:.4e} J")
+#print(f"Final KE:        {solver_results['kinetic'][-1]:.4e} J")
 
 pvd_path = write_pvd('vtk_output', solver_results['vtk_entries'])
 print(f"VTK steps saved: {len(solver_results['vtk_entries'])}  →  {pvd_path}")
