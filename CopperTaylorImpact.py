@@ -64,16 +64,17 @@ print(f"Grid:   {numx} × {numy}  ({mesh.deltax*1e3:.1f} mm cells)")
 
 # ----- Particle mesh -----
 # Bar bottom at y=0 — rigid wall contact begins at t=0
-noX, noY = 10, 40                       # 10×40 elements × 16 GP = 6400 particles, ~5/grid cell
+noX, noY = 15, 50                       # 10×40 elements × 16 GP = 6400 particles, ~5/grid cell
 pmesh = Mesh(D_bar, L_bar, noX, noY)
 pmesh.node[:, 0] += Lx/2 - D_bar/2     # centre bar horizontally
+pmesh.node[:, 1] += .1*1e-3   # lift bar slightly above y=0 to avoid initial penetration with rigid wall
 
 print_section("Bar Geometry")
 print(f"D = {D_bar*1e3:.1f} mm,  L = {L_bar*1e3:.1f} mm  (L/D = {L_bar/D_bar:.2f})")
 print(f"Particle mesh: {noX} x {noY} elements")
 
 # ----- Particle initialisation -----
-ngp    = 4
+ngp    = 1
 W, Q   = gauss_2D(ngp)
 pCount = len(pmesh.element) * len(W)
 
@@ -130,7 +131,7 @@ node_state = NodeState(mesh.nodeCount)
 
 dtcrit = mesh.deltax / material.wave_speed
 dtime  = 0.5 * dtcrit
-nsteps = 1500             # ~120 μs — well past full mushrooming
+nsteps = 1000             # ~120 μs — well past full mushrooming
 time   = nsteps * dtime
 
 print_section("Solver")
@@ -189,7 +190,7 @@ D_tip   = x_final.max() - x_final.min()
 
 print(f"Initial length:    {L_bar*1e3:.2f} mm")
 print(f"Final length:      {L_final*1e3:.2f} mm  (compression: {(1 - L_final/L_bar)*100:.1f}%)")
-print(f"Mushroom diameter: {D_tip*1e3:.2f} mm  (initial: {D_bar*1e3:.1f} mm)")
+print(f"Mushroom diameter: {D_tip*1e3:.2f} mm  (mushrooming: {-(1 - D_tip/D_bar)*100:.1f}%)")
 
 # %%
 print_section("Visualisation — Final Configuration")

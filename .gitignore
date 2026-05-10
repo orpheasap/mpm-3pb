@@ -1,3 +1,25 @@
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.loa
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.bbl
+*.blg
+*.idx
+*.ilg
+*.ind
+*.nav
+*.snm
+*.vrb
+*.xdv
+
 profile_output.prof
 profile_cmds.txt
 vtk_output/
